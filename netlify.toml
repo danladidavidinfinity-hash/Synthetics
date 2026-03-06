@@ -1,0 +1,13 @@
+[build]
+  publish = "."
+  functions = "netlify/functions"
+  command = "npm install"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["ws", "bufferutil", "utf-8-validate"]
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

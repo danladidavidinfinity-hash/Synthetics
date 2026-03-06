@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Boom & Crash · Signal Model</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#050a0e;--bg2:#08111a;--bg3:#0b1822;--bg4:#0e1f2e;
+  --border:#0d2035;--b2:#142840;
+  --boom:#00d4ff;--crash:#ff2d6b;--bull:#00e676;--bear:#ff4560;
+  --warn:#ffa726;--spike:#fff176;
+  --text:#cce4f5;--dim:#0a1520;--muted:#1e3a52;--sub:#4a7090;
+}
+html,body{background:var(--bg);color:var(--text);font-family:'DM Mono','Courier New',monospace;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:2px}::-webkit-scrollbar-thumb{background:var(--b2)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.15}}
+@keyframes fadein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes glow{0%,100%{text-shadow:0 0 10px currentColor,0 0 20px currentColor}50%{text-shadow:0 0 25px currentColor,0 0 60px currentColor}}
+@keyframes scan{0%{transform:translateY(-100%)}100%{transform:translateY(100vh)}}
+@keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes flash{0%{opacity:.6}50%{opacity:0}100%{opacity:.6}}
+.spin{animation:spin 1s linear infinite}
+.pulse{animation:pulse 1s infinite}
+.fadein{animation:fadein .3s ease both}
+.glow{animation:glow 2.5s ease-in-out infinite}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,212,255,.006) 3px,rgba(0,212,255,.006) 4px);pointer-events:none;z-index:0}
+body::after{content:'';position:fixed;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.25),transparent);animation:scan 6s linear infinite;pointer-events:none;z-index:0}
+#spike-flash{position:fixed;inset:0;pointer-events:none;z-index:500;opacity:0;transition:opacity .15s}
+/* LOADING */
+#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:999}
+.spinner{width:36px;height:36px;border:2px solid var(--boom);border-top-color:transparent;border-radius:50%}
+#load-status{font-size:11px;letter-spacing:2px;color:var(--boom)}
+#load-sub{font-size:9px;color:var(--sub);max-width:300px;text-align:center;line-height:1.6}
+#load-err{font-size:9px;color:var(--crash);max-width:320px;text-align:center;margin-top:4px;line-height:1.6;min-height:16px}
+/* ERROR */
+#err-screen{position:fixed;inset:0;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:999}
+/* HEADER */
+#hdr{position:sticky;top:0;z-index:100;background:rgba(5,10,14,.96);border-bottom:1px solid var(--b2);backdrop-filter:blur(8px);display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;padding:9px 16px}
+.logo{font-family:'Orbitron',monospace;font-weight:900;font-size:16px;letter-spacing:3px;background:linear-gradient(90deg,var(--boom),var(--crash));-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.inst-tabs{display:flex;gap:4px;justify-content:center}
+.itab{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;padding:5px 12px;border-radius:4px;border:1px solid var(--muted);color:var(--sub);background:none;cursor:pointer;transition:all .2s}
+.itab:hover{color:var(--text);border-color:var(--sub)}
+.itab.boom.active{border-color:var(--boom);color:var(--boom);background:rgba(0,212,255,.07);box-shadow:0 0 12px rgba(0,212,255,.1)}
+.itab.crash.active{border-color:var(--crash);color:var(--crash);background:rgba(255,45,107,.07);box-shadow:0 0 12px rgba(255,45,107,.1)}
+.hdr-r{display:flex;align-items:center;gap:10px}
+.ldot{width:6px;height:6px;border-radius:50%;display:inline-block}
+/* TICKER */
+#tkr{height:22px;background:rgba(8,17,26,.9);border-bottom:1px solid var(--border);overflow:hidden;position:relative;z-index:1}
+#tkr-in{display:flex;white-space:nowrap;animation:ticker 22s linear infinite;font-size:9px;line-height:22px;padding:0 14px}
+.ti{margin-right:28px;color:var(--sub)}.ti b{font-weight:500}
+/* APP */
+#app{max-width:1200px;margin:0 auto;padding:12px;position:relative;z-index:1}
+/* HERO */
+#hero{border:1px solid var(--b2);border-radius:12px;padding:16px;margin-bottom:10px;background:linear-gradient(135deg,var(--bg2),var(--bg));position:relative;overflow:hidden}
+#hero::before{content:'';position:absolute;top:-50%;right:-5%;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(0,212,255,.035),transparent 70%);pointer-events:none}
+.hgrid{display:grid;grid-template-columns:170px 1fr 140px 140px;gap:14px;align-items:center}
+.sig-box{text-align:center}
+.sig-tag{font-size:8px;letter-spacing:3px;color:var(--sub);margin-bottom:5px}
+.sig-word{font-family:'Orbitron',monospace;font-size:50px;font-weight:900;line-height:1;transition:color .4s}
+.sig-meta{display:flex;gap:10px;justify-content:center;margin-top:7px;font-size:9px;color:var(--sub)}
+.sig-meta span{color:var(--text)}
+.price-val{font-family:'Orbitron',monospace;font-size:34px;font-weight:700;color:#e8f4ff}
+.price-chg{font-size:10px;margin-top:2px}
+.lgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-top:9px}
+.lv{background:var(--bg3);border-radius:5px;padding:5px 7px;border:1px solid transparent}
+.lv-l{font-size:7px;letter-spacing:2px;color:var(--sub);margin-bottom:2px}
+.lv-v{font-family:'Orbitron',monospace;font-size:10px;font-weight:600}
+.cbox{background:var(--bg3);border:1px solid var(--b2);border-radius:10px;padding:11px;text-align:center}
+.cnum{font-family:'Orbitron',monospace;font-size:36px;font-weight:700;line-height:1}
+.cbar{height:4px;background:var(--dim);border-radius:2px;overflow:hidden;margin:5px 0 2px}
+.cfill{height:100%;border-radius:2px;transition:width .5s,background .5s}
+.spbox{background:var(--bg3);border:1px solid var(--b2);border-radius:10px;padding:11px;text-align:center}
+.spnum{font-family:'Orbitron',monospace;font-size:30px;font-weight:700}
+/* CHART */
+#chart-card{background:var(--bg2);border:1px solid var(--b2);border-radius:10px;padding:13px;margin-bottom:10px}
+#chart{width:100%;height:210px;display:block}
+/* TABS */
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:9px}
+.tab{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;padding:4px 10px;border-radius:4px;border:1px solid var(--muted);color:var(--sub);background:none;cursor:pointer;transition:all .2s}
+.tab:hover{color:var(--text);border-color:var(--sub)}
+.tab.active{background:var(--bg3);border-color:var(--boom);color:var(--boom)}
+/* GRID */
+.mgrid{display:grid;grid-template-columns:1fr 270px;gap:10px}
+.cl,.cr{display:flex;flex-direction:column;gap:9px}
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--b2);border-radius:10px;padding:13px}
+.clbl{font-size:8px;letter-spacing:2px;color:var(--sub);margin-bottom:9px}
+.srow{display:flex;align-items:center;gap:7px;padding:4px 7px;background:var(--bg3);border-radius:4px;margin-bottom:3px}
+.ci{display:flex;align-items:flex-start;gap:8px;padding:6px 8px;background:var(--bg3);border-radius:4px;margin-bottom:3px;border-left:3px solid}
+.estep{padding:8px 11px;background:var(--bg3);border-radius:6px;margin-bottom:5px;border-left:3px solid;font-size:10px;line-height:1.7;color:var(--text)}
+.spe{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--dim)}
+.hr{display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--dim);font-size:9px}
+/* BTN */
+.btn{font-family:'DM Mono',monospace;cursor:pointer;border:none;outline:none;transition:all .2s}
+.btn:hover{filter:brightness(1.15);transform:translateY(-1px)}
+/* MODAL */
+#mod-ov{position:fixed;inset:0;background:rgba(5,10,14,.93);z-index:999;display:none;align-items:center;justify-content:center;padding:14px}
+#mod{background:var(--bg2);border:1px solid var(--b2);border-radius:14px;max-width:500px;width:100%;max-height:88vh;overflow-y:auto;padding:22px}
+.mc{float:right;background:none;border:none;color:var(--sub);font-size:17px;cursor:pointer;font-family:'DM Mono',monospace}
+.mc:hover{color:var(--text)}
+.htitle{font-family:'Orbitron',monospace;font-size:10px;color:var(--boom);letter-spacing:2px;margin-bottom:7px;margin-top:16px}
+.hstep{display:flex;gap:9px;margin-bottom:7px;font-size:10px;line-height:1.7;color:var(--text)}
+.sn{color:var(--boom);font-weight:700;min-width:14px}
+@media(max-width:820px){.hgrid{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}.mgrid{grid-template-columns:1fr}.lgrid{grid-template-columns:repeat(2,1fr)}.sig-word{font-size:38px}.price-val{font-size:26px}}
+</style>
+</head>
+<body>
+
+<div id="spike-flash"></div>
+
+<!-- LOADING -->
+<div id="loading">
+  <div class="spinner spin"></div>
+  <div id="load-status">CONNECTING TO DERIV</div>
+  <div id="load-sub">Fetching live Boom & Crash prices via secure server proxy…</div>
+  <div id="load-err"></div>
+</div>
+
+<!-- ERROR -->
+<div id="err-screen">
+  <div style="font-size:26px">⚠</div>
+  <div style="font-size:13px;color:var(--crash);letter-spacing:1px">CONNECTION FAILED</div>
+  <div id="err-msg" style="font-size:10px;color:var(--sub);max-width:340px;text-align:center;line-height:1.7"></div>
+  <button class="btn" onclick="location.reload()" style="background:rgba(0,212,255,.1);border:1px solid var(--boom);color:var(--boom);padding:7px 16px;border-radius:4px;font-size:10px;letter-spacing:1px">↻ RETRY</button>
+</div>
+
+<!-- HOW TO USE MODAL -->
+<div id="mod-ov">
+  <div id="mod">
+    <button class="mc" onclick="closeModal()">✕</button>
+    <div style="font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--boom);letter-spacing:2px">HOW TO USE</div>
+
+    <div class="htitle">WHAT THIS APP DOES</div>
+    <div style="font-size:10px;color:var(--text);line-height:1.8">Analyses live Boom & Crash prices every 2 seconds and tells you the best moment to BUY, SELL or WAIT. Uses SMC market structure, EMA alignment, momentum, spike probability and post-spike entry techniques.</div>
+
+    <div class="htitle">READING THE MAIN SIGNAL</div>
+    <div class="hstep"><span class="sn">▲</span><span><b style="color:var(--bull)">BUY</b> — Bullish structure. For Boom: trend heading toward next upward spike. For Crash: price bouncing after crash, follow the rally.</span></div>
+    <div class="hstep"><span class="sn">▼</span><span><b style="color:var(--bear)">SELL</b> — Bearish structure. For Crash: trend dropping toward next crash spike. For Boom: pulling back after boom spike.</span></div>
+    <div class="hstep"><span class="sn">◈</span><span><b style="color:var(--warn)">WAIT</b> — Mixed signals. No edge. Stay out until signal clarifies.</span></div>
+
+    <div class="htitle">SPIKE ZONE — MOST IMPORTANT NUMBER</div>
+    <div class="hstep"><span class="sn">1</span><span><b style="color:var(--sub)">EARLY</b> — Spike just happened. Trade the trend between spikes.</span></div>
+    <div class="hstep"><span class="sn">2</span><span><b style="color:var(--boom)">BUILDING</b> — Probability growing. Stay alert.</span></div>
+    <div class="hstep"><span class="sn">3</span><span><b style="color:var(--warn)">WARM</b> — Spike becoming likely. Tighten SL if in a trade.</span></div>
+    <div class="hstep"><span class="sn">4</span><span><b style="color:var(--spike)">HOT (80%+)</b> — Spike overdue. Strongest signal. Look to enter NOW.</span></div>
+
+    <div class="htitle">HOW TO ENTER A TRADE</div>
+    <div class="hstep"><span class="sn">1</span><span>Wait for BUY or SELL signal with confidence above 60%</span></div>
+    <div class="hstep"><span class="sn">2</span><span>Check Spike Zone — HOT adds strongest weight to signal</span></div>
+    <div class="hstep"><span class="sn">3</span><span>Confluences tab — need 3+ factors on one side</span></div>
+    <div class="hstep"><span class="sn">4</span><span>Open MT5 → place trade using the SL and TP levels shown</span></div>
+    <div class="hstep"><span class="sn">5</span><span>Hit TP1 → move SL to entry → let trade run to TP2/TP3</span></div>
+
+    <div class="htitle">POST-SPIKE ENTRIES (HIGHEST PROBABILITY)</div>
+    <div class="hstep"><span class="sn">▲</span><span><b style="color:var(--boom)">After BOOM spike UP:</b> Wait 3–10 tick pullback → Enter BUY on first bullish tick → SL below pullback low</span></div>
+    <div class="hstep"><span class="sn">▼</span><span><b style="color:var(--crash)">After CRASH spike DOWN:</b> Wait 3–15 tick bounce → Enter SELL on first bearish tick → SL above bounce high</span></div>
+
+    <div class="htitle">RISK RULES</div>
+    <div class="hstep"><span class="sn">⚠</span><span>Max 1% of account per trade. Never risk more than you can afford to lose.</span></div>
+    <div class="hstep"><span class="sn">⚠</span><span>Never enter when signal says WAIT. Stop after 3 losses in a row.</span></div>
+
+    <button class="btn" onclick="closeModal()" style="width:100%;background:rgba(0,212,255,.1);border:1px solid var(--boom);color:var(--boom);padding:9px;border-radius:6px;font-size:10px;letter-spacing:2px;margin-top:16px">GOT IT — CLOSE</button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div id="hdr">
+  <div class="logo">B&C SIGNAL</div>
+  <div class="inst-tabs">
+    <button class="itab boom active" onclick="switchInst('BOOM500',this)">BOOM 500</button>
+    <button class="itab crash"       onclick="switchInst('CRASH1000',this)">CRASH 1000</button>
+    <button class="itab crash"       onclick="switchInst('CRASH300',this)">CRASH 300</button>
+  </div>
+  <div class="hdr-r">
+    <span class="ldot pulse" id="conn-dot" style="background:var(--warn)"></span>
+    <span id="conn-lbl" style="font-size:9px;color:var(--warn)">CONNECTING</span>
+    <span id="last-ts" style="font-size:8px;color:var(--sub)"></span>
+    <button class="btn" onclick="openModal()" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2);color:var(--boom);padding:4px 9px;border-radius:4px;font-size:9px;letter-spacing:1px">? GUIDE</button>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div id="tkr">
+  <div id="tkr-in">
+    <span class="ti">BOOM 500 <b id="tk-B5" style="color:var(--boom)">—</b></span>
+    <span class="ti">CRASH 1000 <b id="tk-C10" style="color:var(--crash)">—</b></span>
+    <span class="ti">CRASH 300 <b id="tk-C3" style="color:#ff7043">—</b></span>
+    <span class="ti">BOOM 500 <b id="tk-B5b" style="color:var(--boom)">—</b></span>
+    <span class="ti">CRASH 1000 <b id="tk-C10b" style="color:var(--crash)">—</b></span>
+    <span class="ti">CRASH 300 <b id="tk-C3b" style="color:#ff7043">—</b></span>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+
+  <div id="hero">
+    <div class="hgrid">
+      <div class="sig-box">
+        <div class="sig-tag">SIGNAL</div>
+        <div class="sig-word glow" id="sig-word">—</div>
+        <div class="sig-meta">Score <span id="sig-score">—</span>&nbsp; Conf <span id="sig-conf">—</span></div>
+      </div>
+      <div>
+        <div style="font-size:8px;letter-spacing:3px;color:var(--sub);margin-bottom:3px">LIVE PRICE · DERIV</div>
+        <div class="price-val" id="p-val">—</div>
+        <div class="price-chg" id="p-chg"></div>
+        <div class="lgrid">
+          <div class="lv" id="lv-sl"><div class="lv-l">STOP LOSS</div><div class="lv-v" id="v-sl" style="color:#ff4560">—</div></div>
+          <div class="lv" id="lv-t1"><div class="lv-l">TP 1</div><div class="lv-v" id="v-t1" style="color:#00e676">—</div></div>
+          <div class="lv" id="lv-t2"><div class="lv-l">TP 2</div><div class="lv-v" id="v-t2" style="color:#00e676">—</div></div>
+          <div class="lv" id="lv-t3"><div class="lv-l">TP 3</div><div class="lv-v" id="v-t3" style="color:#00d4ff">—</div></div>
+        </div>
+      </div>
+      <div class="cbox">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--sub);margin-bottom:4px">TICKS SINCE<br>LAST SPIKE</div>
+        <div class="cnum" id="tc-n">0</div>
+        <div class="cbar"><div class="cfill" id="tc-b" style="width:0%"></div></div>
+        <div style="font-size:8px;color:var(--sub)" id="tc-avg">avg —</div>
+      </div>
+      <div class="spbox">
+        <div style="font-size:8px;letter-spacing:1px;color:var(--sub);margin-bottom:4px">SPIKE<br>PROBABILITY</div>
+        <div class="spnum" id="sp-n">—</div>
+        <div style="font-size:9px;letter-spacing:2px;margin-top:3px" id="sp-z">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="chart-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
+      <span class="clbl" style="margin:0">LIVE CHART · DERIV PRICES · LAST 300 TICKS</span>
+      <div style="display:flex;gap:12px;font-size:9px;color:var(--sub)">
+        <span><span style="color:var(--spike)">⚡</span> Spike</span>
+        <span><span style="color:var(--bull)">▬</span> Up</span>
+        <span><span style="color:var(--bear)">▬</span> Down</span>
+        <span><span style="color:rgba(255,255,255,.2)">--</span> EMA</span>
+      </div>
+    </div>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="sTab('structure',this)">STRUCTURE</button>
+    <button class="tab"        onclick="sTab('spike',this)">SPIKE ZONE</button>
+    <button class="tab"        onclick="sTab('entry',this)">ENTRY SETUP</button>
+    <button class="tab"        onclick="sTab('confluences',this)">CONFLUENCES</button>
+  </div>
+
+  <div class="mgrid">
+    <div class="cl">
+      <div id="p-structure"   class="card fadein"></div>
+      <div id="p-spike"       class="card fadein" style="display:none"></div>
+      <div id="p-entry"       class="card fadein" style="display:none"></div>
+      <div id="p-confluences" class="card fadein" style="display:none"></div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:11px">
+          <span class="clbl" style="margin:0">◈ TRADE BRIEF</span>
+          <button class="btn" id="ai-btn" onclick="getAI()" style="background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.25);color:var(--boom);padding:4px 11px;border-radius:4px;font-size:9px;letter-spacing:1px">⚡ GENERATE</button>
+        </div>
+        <div id="ai-out" style="font-size:10px;color:var(--sub);text-align:center;padding:12px">Click Generate for AI analysis of current setup</div>
+      </div>
+    </div>
+    <div class="cr">
+      <div class="card" id="inst-card"></div>
+      <div class="card">
+        <div class="clbl">SPIKE LOG</div>
+        <div id="sp-log"><div style="font-size:9px;color:var(--sub);text-align:center;padding:8px">Waiting for spikes…</div></div>
+      </div>
+      <div class="card">
+        <div class="clbl">SIGNAL HISTORY</div>
+        <div id="hist"><div style="font-size:9px;color:var(--sub);text-align:center;padding:8px">Building…</div></div>
+      </div>
+      <div style="background:rgba(255,45,107,.04);border:1px solid rgba(255,45,107,.15);border-radius:8px;padding:10px;font-size:9px;color:var(--sub);line-height:1.7">
+        ⚠ <span style="color:var(--crash)">RISK WARNING</span><br>
+        Boom & Crash spikes cannot be precisely predicted. Signals improve your edge but do not guarantee results. Max 1% risk per trade.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   CONFIG
+═══════════════════════════════════════════ */
+const INST = {
+  BOOM500:   { name:'Boom 500',   type:'boom',  color:'#00d4ff', avgInterval:500,  desc:'~1 upward spike per 500 ticks',    direction:'UP'   },
+  CRASH1000: { name:'Crash 1000', type:'crash', color:'#ff2d6b', avgInterval:1000, desc:'~1 downward spike per 1000 ticks', direction:'DOWN' },
+  CRASH300:  { name:'Crash 300',  type:'crash', color:'#ff7043', avgInterval:300,  desc:'~1 downward spike per 300 ticks',  direction:'DOWN' },
+}
+const TICKER_MAP = {
+  BOOM500:['tk-B5','tk-B5b'], CRASH1000:['tk-C10','tk-C10b'], CRASH300:['tk-C3','tk-C3b']
+}
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let cur      = 'BOOM500'
+let ticks    = { BOOM500:[], CRASH1000:[], CRASH300:[] }
+let since    = { BOOM500:0,  CRASH1000:0,  CRASH300:0  }
+let spkLog   = { BOOM500:[], CRASH1000:[], CRASH300:[]  }
+let sigs     = { BOOM500:null, CRASH1000:null, CRASH300:null }
+let hist     = []
+let fails    = 0
+let fetching = false
+let booted   = false
+
+/* ═══════════════════════════════════════════
+   DATA FETCH — Netlify proxy polls Deriv
+═══════════════════════════════════════════ */
+async function fetchTick(sym) {
+  const res  = await fetch(`/.netlify/functions/tick?symbol=${sym}`)
+  const data = await res.json()
+  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`)
+  return data
+}
+
+async function pollAll() {
+  if (fetching) return
+  fetching = true
+  let anyOk = false
+
+  for (const sym of Object.keys(INST)) {
+    try {
+      const d = await fetchTick(sym)
+      if (d.ok && d.price) {
+        ingestTick(sym, parseFloat(d.price), d.epoch * 1000)
+        anyOk = true
+      }
+    } catch (e) {
+      document.getElementById('load-err').textContent = sym + ': ' + e.message
+    }
+  }
+
+  fetching = false
+
+  if (anyOk) {
+    fails = 0
+    if (!booted) boot()
+  } else {
+    fails++
+    if (fails >= 6) showError()
+  }
+}
+
+function boot() {
+  booted = true
+  document.getElementById('loading').style.display = 'none'
+  document.getElementById('app').style.display = 'block'
+  setConn(true)
+}
+
+function setConn(ok) {
+  const dot = document.getElementById('conn-dot')
+  const lbl = document.getElementById('conn-lbl')
+  dot.style.background = ok ? 'var(--bull)' : 'var(--warn)'
+  dot.classList.toggle('pulse', !ok)
+  lbl.textContent = ok ? 'LIVE · DERIV' : 'RECONNECTING'
+  lbl.style.color = ok ? 'var(--bull)' : 'var(--warn)'
+}
+
+function showError() {
+  document.getElementById('loading').style.display = 'none'
+  document.getElementById('err-screen').style.display = 'flex'
+  document.getElementById('err-msg').textContent =
+    'Could not reach Deriv after multiple attempts. Check that DERIV_TOKEN is set in your Netlify environment variables, then retry.'
+}
+
+/* ═══════════════════════════════════════════
+   TICK INGESTION + SPIKE DETECTION
+═══════════════════════════════════════════ */
+function ingestTick(key, price, time) {
+  const inst = INST[key], arr = ticks[key]
+  let isSpike = false
+
+  if (arr.length > 0) {
+    const prev = arr[arr.length-1].p
+    const pct  = Math.abs((price - prev) / prev) * 100
+    if (pct >= 0.4) {
+      const dir = price > prev ? 'UP' : 'DOWN'
+      if ((inst.type==='boom'&&dir==='UP') || (inst.type==='crash'&&dir==='DOWN')) {
+        isSpike = true
+        since[key] = 0
+        spkLog[key].unshift({ p:price.toFixed(5), t:new Date(time).toLocaleTimeString(), dir, pct:pct.toFixed(3) })
+        spkLog[key] = spkLog[key].slice(0,20)
+        if (key===cur) flashSpike(inst)
+      }
+    }
+  }
+  if (!isSpike) since[key]++
+
+  arr.push({ p:price, t:time, spike:isSpike })
+  if (arr.length > 600) arr.shift()
+
+  // Update ticker
+  TICKER_MAP[key].forEach(id => {
+    const el = document.getElementById(id)
+    if (el) el.textContent = price.toFixed(5)
+  })
+
+  if (key===cur) {
+    sigs[key] = computeSignal(key)
+    if (booted) {
+      renderAll()
+      document.getElementById('last-ts').textContent = new Date().toLocaleTimeString()
+    }
+  }
+}
+
+function flashSpike(inst) {
+  const f = document.getElementById('spike-flash')
+  f.style.background = inst.type==='boom' ? 'rgba(0,212,255,.15)' : 'rgba(255,45,107,.15)'
+  f.style.opacity = '1'
+  setTimeout(() => { f.style.opacity='0' }, 300)
+  setTimeout(() => { f.style.opacity='1' }, 600)
+  setTimeout(() => { f.style.opacity='0' }, 900)
+}
+
+/* ═══════════════════════════════════════════
+   SIGNAL ENGINE
+═══════════════════════════════════════════ */
+const ema = (arr,p) => { const k=2/(p+1);let v=arr[0];for(let i=1;i<arr.length;i++)v=arr[i]*k+v*(1-k);return v }
+
+function swings(ps, lb=7) {
+  const H=[],L=[]
+  for(let i=lb;i<ps.length-lb;i++){
+    const sl=ps.slice(i-lb,i+lb+1)
+    if(ps[i]===Math.max(...sl)) H.push({i,p:ps[i]})
+    if(ps[i]===Math.min(...sl)) L.push({i,p:ps[i]})
+  }
+  return {H,L}
+}
+
+function structure(ps) {
+  const {H,L}=swings(ps)
+  if(H.length<2||L.length<2) return {trend:'NEUTRAL',HH:false,HL:false,LH:false,LL:false,bos:false}
+  const rH=H.slice(-2),rL=L.slice(-2)
+  const HH=rH[1].p>rH[0].p,HL=rL[1].p>rL[0].p,LH=rH[1].p<rH[0].p,LL=rL[1].p<rL[0].p
+  const trend=HH&&HL?'BULLISH':LH&&LL?'BEARISH':'NEUTRAL'
+  const c=ps[ps.length-1]
+  return {trend,HH,HL,LH,LL,bos:trend==='BULLISH'?c>rH[0].p:trend==='BEARISH'?c<rL[0].p:false}
+}
+
+function momentum(ps) {
+  const n=ps.length; if(n<20) return {roc:0,accel:0,ext:false,dev:0}
+  const roc=((ps[n-1]-ps[n-20])/ps[n-20])*100
+  const roc2=((ps[n-10]-ps[n-20])/ps[n-20])*100
+  const e20=ema(ps.slice(-20),20)
+  const dev=((ps[n-1]-e20)/e20)*100
+  return {roc:+roc.toFixed(3),accel:+(roc-roc2).toFixed(3),ext:Math.abs(dev)>0.35,dev:+dev.toFixed(3)}
+}
+
+function consDir(ps,n=6) {
+  if(ps.length<n+1) return {cnt:0,dir:'NONE'}
+  const dir=ps[ps.length-1]>ps[ps.length-2]?'UP':'DOWN'
+  let cnt=0
+  for(let i=ps.length-1;i>ps.length-n-1&&i>0;i--){
+    if((ps[i]>ps[i-1]?'UP':'DOWN')===dir)cnt++;else break
+  }
+  return {cnt,dir}
+}
+
+function spProb(key) {
+  const s=since[key],avg=INST[key].avgInterval
+  const pct=Math.min(99,Math.round((1-Math.pow(1-1/avg,s))*100))
+  const zone=pct>=80?'HOT':pct>=50?'WARM':pct>=25?'BUILDING':'EARLY'
+  const zc=pct>=80?'#fff176':pct>=50?'#ffa726':pct>=25?'#00d4ff':'#1e3a52'
+  return {pct,zone,zc,since:s,avg}
+}
+
+function atr(ps,p=14) {
+  if(ps.length<p+1) return 0.001
+  const rs=[];for(let i=ps.length-p;i<ps.length;i++)rs.push(Math.abs(ps[i]-ps[i-1]))
+  return rs.reduce((s,v)=>s+v,0)/p
+}
+
+function postSpike(key) {
+  const arr=ticks[key],spk=spkLog[key]
+  if(!spk.length||arr.length<10) return null
+  const li=arr.slice().reverse().findIndex(t=>t.spike)
+  if(li<0) return null
+  const sp=arr[arr.length-1-li].p,cp=arr[arr.length-1].p
+  const ret=((cp-sp)/sp)*100
+  const isBoom=INST[key].type==='boom'
+  const fav=isBoom?(ret<-0.03&&ret>-0.4):(ret>0.03&&ret<0.4)
+  const q=li<40&&fav?'PRIME':li<80?'GOOD':li<180?'FAIR':'STALE'
+  return {li,sp:+sp.toFixed(5),ret:+ret.toFixed(4),q,fav}
+}
+
+function computeSignal(key) {
+  const inst=INST[key],arr=ticks[key]
+  if(arr.length<40) return null
+  const ps=arr.map(t=>t.p)
+  const str=structure(ps),mv=momentum(ps),cd=consDir(ps),sp=spProb(key),ps2=postSpike(key)
+  const at=atr(ps),c=ps[ps.length-1]
+  const e20=ema(ps.slice(-60),20),e50=ema(ps.slice(-120),50)
+  let score=0;const confs=[]
+
+  if(str.trend==='BULLISH'){score+=3;confs.push({t:'Bullish structure (HH+HL)',b:true})}
+  if(str.trend==='BEARISH'){score-=3;confs.push({t:'Bearish structure (LH+LL)',b:false})}
+  if(str.bos&&str.trend==='BULLISH'){score+=2;confs.push({t:'Bullish Break of Structure',b:true})}
+  if(str.bos&&str.trend==='BEARISH'){score-=2;confs.push({t:'Bearish Break of Structure',b:false})}
+  if(c>e20&&e20>e50){score+=2;confs.push({t:'Price > EMA20 > EMA50 (bullish stack)',b:true})}
+  if(c<e20&&e20<e50){score-=2;confs.push({t:'Price < EMA20 < EMA50 (bearish stack)',b:false})}
+  if(mv.roc>0.05){score+=1;confs.push({t:`Positive ROC +${mv.roc}%`,b:true})}
+  if(mv.roc<-0.05){score-=1;confs.push({t:`Negative ROC ${mv.roc}%`,b:false})}
+  if(mv.ext)confs.push({t:`Overextended from EMA (${mv.dev}%) — reversal risk`,b:null})
+  if(cd.cnt>=5&&cd.dir==='UP'){score+=1.5;confs.push({t:`${cd.cnt} consecutive bullish ticks`,b:true})}
+  if(cd.cnt>=5&&cd.dir==='DOWN'){score-=1.5;confs.push({t:`${cd.cnt} consecutive bearish ticks`,b:false})}
+
+  const spBull=inst.type==='boom'
+  if(sp.zone==='HOT'){score+=spBull?3:-3;confs.push({t:`Spike zone HOT ${sp.pct}% — ${inst.direction} spike imminent`,b:spBull})}
+  else if(sp.zone==='WARM'){score+=spBull?1.5:-1.5;confs.push({t:`Spike zone WARM ${sp.pct}%`,b:spBull})}
+
+  if(ps2){
+    const pb=inst.type==='crash'
+    if(ps2.q==='PRIME'){score+=pb?2.5:-2.5;confs.push({t:`PRIME post-spike (${Math.abs(ps2.ret).toFixed(3)}% retrace)`,b:pb})}
+    else if(ps2.q==='GOOD'){score+=pb?1.5:-1.5;confs.push({t:`GOOD post-spike setup (${ps2.li} ticks ago)`,b:pb})}
+  }
+
+  const conf=Math.min(97,Math.round((Math.abs(score)/14)*100))
+  const dir=score>=3?'BUY':score<=-3?'SELL':'WAIT'
+  const col=dir==='BUY'?'#00e676':dir==='SELL'?'#ff4560':'#ffa726'
+  const sl=dir==='BUY'?+(c-at*8).toFixed(5):+(c+at*8).toFixed(5)
+  const tp1=dir==='BUY'?+(c+at*10).toFixed(5):+(c-at*10).toFixed(5)
+  const tp2=dir==='BUY'?+(c+at*20).toFixed(5):+(c-at*20).toFixed(5)
+  const tp3=dir==='BUY'?+(c+at*35).toFixed(5):+(c-at*35).toFixed(5)
+  const rr=+((Math.abs(tp2-c))/(Math.abs(sl-c)||0.001)).toFixed(1)
+  return {dir,col,score:+score.toFixed(1),conf,c,sl,tp1,tp2,tp3,rr,at:+at.toFixed(6),confs,str,mv,cd,sp,ps2,e20:+e20.toFixed(5),e50:+e50.toFixed(5)}
+}
+
+/* ═══════════════════════════════════════════
+   CHART
+═══════════════════════════════════════════ */
+function drawChart() {
+  const canvas=document.getElementById('chart');if(!canvas)return
+  const inst=INST[cur],arr=ticks[cur];if(arr.length<5)return
+  const dpr=window.devicePixelRatio||1,W=canvas.parentElement.clientWidth-26,H=210
+  canvas.style.width=W+'px';canvas.style.height=H+'px';canvas.width=W*dpr;canvas.height=H*dpr
+  const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr)
+  const sl=arr.slice(-300),ps=sl.map(t=>t.p)
+  const mn=Math.min(...ps),mx=Math.max(...ps),rng=mx-mn||0.001
+  const py=v=>H-12-((v-mn)/rng)*(H-24),px=i=>10+(i/(sl.length-1))*(W-20)
+  ctx.clearRect(0,0,W,H)
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,.02)';ctx.lineWidth=1
+  for(let i=0;i<=4;i++){const y=12+(i/4)*(H-24);ctx.beginPath();ctx.moveTo(10,y);ctx.lineTo(W-10,y);ctx.stroke()}
+  // EMA
+  const ev=[];let e=ps[0];const k=2/51
+  ps.forEach(p=>{e=p*k+e*(1-k);ev.push(e)})
+  ctx.beginPath();ctx.strokeStyle='rgba(255,255,255,.1)';ctx.lineWidth=1;ctx.setLineDash([3,3])
+  ev.forEach((v,i)=>i===0?ctx.moveTo(px(i),py(v)):ctx.lineTo(px(i),py(v)))
+  ctx.stroke();ctx.setLineDash([])
+  // Price line
+  let seg=0
+  for(let i=1;i<sl.length;i++){
+    const bull=sl[i].p>=sl[i-1].p,nb=i+1<sl.length?sl[i+1].p>=sl[i].p:bull
+    if(nb!==bull||i===sl.length-1){
+      ctx.beginPath();ctx.strokeStyle=bull?'rgba(0,230,118,.85)':'rgba(255,69,96,.85)';ctx.lineWidth=1.5;ctx.lineJoin='round'
+      for(let j=seg;j<=i;j++)j===seg?ctx.moveTo(px(j),py(sl[j].p)):ctx.lineTo(px(j),py(sl[j].p))
+      ctx.stroke();seg=i
+    }
+  }
+  // Spike markers
+  sl.forEach((t,i)=>{
+    if(!t.spike)return
+    const x=px(i),y=py(t.p),up=inst.type==='boom'
+    ctx.strokeStyle='#fff176';ctx.lineWidth=2
+    ctx.beginPath();ctx.moveTo(x,up?y+18:y-18);ctx.lineTo(x,up?y-2:y+2);ctx.stroke()
+    ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fillStyle='#fff176';ctx.fill()
+    ctx.fillStyle='#fff176';ctx.font='10px monospace';ctx.fillText('⚡',x-5,up?y+30:y-8)
+  })
+  // Current dot + price line
+  const last=sl[sl.length-1]
+  ctx.beginPath();ctx.arc(px(sl.length-1),py(last.p),4,0,Math.PI*2);ctx.fillStyle=inst.color;ctx.fill()
+  ctx.strokeStyle=inst.color+'55';ctx.lineWidth=1;ctx.setLineDash([4,4])
+  ctx.beginPath();ctx.moveTo(10,py(last.p));ctx.lineTo(W-10,py(last.p));ctx.stroke();ctx.setLineDash([])
+  ctx.fillStyle=inst.color;ctx.font='9px DM Mono,monospace';ctx.fillText(last.p.toFixed(5),W-66,py(last.p)-4)
+}
+
+/* ═══════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════ */
+function renderAll() {
+  const sig=sigs[cur];if(!sig)return
+  const inst=INST[cur],c=sig.col
+  document.getElementById('hero').style.borderColor=c+'35'
+  const sw=document.getElementById('sig-word')
+  sw.textContent=sig.dir;sw.style.color=c;sw.style.textShadow=`0 0 40px ${c}70`
+  document.getElementById('sig-score').textContent=(sig.score>0?'+':'')+sig.score
+  document.getElementById('sig-score').style.color=c
+  document.getElementById('sig-conf').textContent=sig.conf+'%'
+  document.getElementById('sig-conf').style.color=c
+  const arr=ticks[cur],prev=arr.length>1?arr[arr.length-2].p:sig.c
+  const chg=((sig.c-prev)/prev*100)
+  document.getElementById('p-val').textContent=sig.c.toFixed(5)
+  document.getElementById('p-chg').textContent=(chg>=0?'▲ +':'▼ ')+chg.toFixed(4)+'%'
+  document.getElementById('p-chg').style.color=chg>=0?'var(--bull)':'var(--bear)'
+  ;[['sl',sig.sl,'#ff4560'],['t1',sig.tp1,'#00e676'],['t2',sig.tp2,'#00e676'],['t3',sig.tp3,'#00d4ff']].forEach(l=>{
+    document.getElementById('v-'+l[0]).textContent=l[1]
+    document.getElementById('lv-'+l[0]).style.borderColor=l[2]+'20'
+  })
+  const sp=sig.sp
+  document.getElementById('tc-n').textContent=sp.since;document.getElementById('tc-n').style.color=sp.zc
+  document.getElementById('tc-avg').textContent='avg ~'+inst.avgInterval+' ticks'
+  document.getElementById('tc-b').style.width=Math.min(100,(sp.since/inst.avgInterval)*100)+'%'
+  document.getElementById('tc-b').style.background=sp.zc
+  document.getElementById('sp-n').textContent=sp.pct+'%';document.getElementById('sp-n').style.color=sp.zc
+  document.getElementById('sp-z').textContent=sp.zone;document.getElementById('sp-z').style.color=sp.zc
+  // Inst card
+  document.getElementById('inst-card').innerHTML=`<div class="clbl">${inst.name.toUpperCase()}</div>
+    <div style="font-family:'Orbitron',monospace;font-size:15px;font-weight:700;color:${inst.color};margin-bottom:6px">${inst.name}</div>
+    <div style="font-size:9px;color:var(--text);line-height:1.7;margin-bottom:9px">${inst.desc}</div>
+    ${[['Spike dir',inst.direction==='UP'?'▲ UP':'▼ DOWN',inst.color],['Avg interval','~'+inst.avgInterval+' ticks','var(--text)'],['R:R','1:'+sig.rr,'var(--warn)'],['ATR',sig.at,'var(--sub)']].map(r=>`<div style="display:flex;justify-content:space-between;padding:4px 7px;background:var(--bg3);border-radius:4px;margin-bottom:3px"><span style="font-size:8px;color:var(--sub)">${r[0]}</span><span style="font-size:9px;color:${r[2]};font-weight:600">${r[1]}</span></div>`).join('')}`
+  renderStructure(sig);renderSpike(sig);renderEntry(sig);renderConfluences(sig)
+  // Spike log
+  const sl=spkLog[cur]
+  document.getElementById('sp-log').innerHTML=sl.length?sl.slice(0,8).map((s,i)=>`<div class="spe" style="opacity:${1-i*.1}"><span style="font-size:10px;color:var(--spike)">⚡ ${s.dir}</span><span style="font-size:9px;color:var(--text)">${s.p}</span><span style="font-size:8px;color:var(--sub)">${s.t}</span></div>`).join(''):'<div style="font-size:9px;color:var(--sub);text-align:center;padding:8px">No spikes detected yet</div>'
+  hist.unshift({dir:sig.dir,sym:inst.name,t:new Date().toLocaleTimeString(),c:sig.col})
+  hist=hist.slice(0,20)
+  document.getElementById('hist').innerHTML=hist.map((h,i)=>`<div class="hr" style="opacity:${1-i*.05}"><span style="color:${h.c};font-weight:700">${h.dir}</span><span style="color:var(--sub)">${h.sym}</span><span style="color:var(--muted)">${h.t}</span></div>`).join('')
+  drawChart()
+}
+
+function renderStructure(sig) {
+  const str=sig.str,tc=str.trend==='BULLISH'?'var(--bull)':str.trend==='BEARISH'?'var(--bear)':'var(--sub)'
+  const badge=(t,c)=>`<span style="font-size:8px;color:${c};background:${c}20;padding:1px 5px;border-radius:3px;margin-right:3px;font-weight:700">${t}</span>`
+  document.getElementById('p-structure').innerHTML=`<div class="clbl">MARKET STRUCTURE</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
+      <div style="background:var(--bg3);border-radius:7px;padding:11px">
+        <div style="font-size:8px;color:var(--sub);margin-bottom:3px">TREND</div>
+        <div style="font-family:'Orbitron',monospace;font-size:24px;font-weight:700;color:${tc}">${str.trend}</div>
+        <div style="margin-top:7px">${str.HH?badge('HH','#00e676'):''}${str.HL?badge('HL','#00e676'):''}${str.LH?badge('LH','#ff4560'):''}${str.LL?badge('LL','#ff4560'):''}${str.bos?badge('BOS','#ffa726'):''}</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:7px;padding:11px">
+        <div style="font-size:8px;color:var(--sub);margin-bottom:6px">EMA STACK</div>
+        ${[{l:'EMA 20',v:sig.e20},{l:'EMA 50',v:sig.e50}].map(e=>{const c=sig.c>e.v?'var(--bull)':'var(--bear)';return `<div class="srow" style="margin-bottom:3px"><span style="font-size:8px;color:var(--sub);width:42px">${e.l}</span><span style="font-size:9px;flex:1">${e.v}</span><span style="font-size:8px;color:${c}">${sig.c>e.v?'▲':'▼'}</span></div>`}).join('')}
+        <div style="margin-top:7px;padding:5px;background:var(--bg4);border-radius:4px"><div style="font-size:8px;color:var(--sub)">CONSECUTIVE</div><div style="font-family:'Orbitron',monospace;font-size:15px;color:${sig.cd.dir==='UP'?'var(--bull)':'var(--bear)'}">${sig.cd.cnt}×${sig.cd.dir}</div></div>
+      </div>
+    </div>
+    <div style="font-size:8px;color:var(--sub);margin-bottom:5px">MOMENTUM</div>
+    ${[{l:'Rate of Change (20)',v:(sig.mv.roc>0?'+':'')+sig.mv.roc+'%',c:sig.mv.roc>0?'var(--bull)':'var(--bear)'},
+       {l:'Acceleration',v:(sig.mv.accel>0?'+':'')+sig.mv.accel+'%',c:sig.mv.accel>0?'var(--bull)':'var(--bear)'},
+       {l:'EMA Deviation',v:(sig.mv.dev>0?'+':'')+sig.mv.dev+'%',c:sig.mv.ext?'var(--warn)':'var(--text)'}].map(m=>`<div class="srow"><span style="font-size:9px;color:var(--sub);flex:1">${m.l}</span><span style="font-size:10px;color:${m.c};font-weight:600">${m.v}</span></div>`).join('')}
+    ${sig.mv.ext?`<div style="margin-top:8px;padding:7px;background:rgba(255,167,38,.07);border:1px solid rgba(255,167,38,.18);border-radius:5px;font-size:9px;color:var(--warn)">⚠ Overextended from EMA — mean reversion likely. Tighten SL or wait for pullback.</div>`:''}`
+}
+
+function renderSpike(sig) {
+  const sp=sig.sp,zc=sp.zc
+  document.getElementById('p-spike').innerHTML=`<div class="clbl">SPIKE ZONE ANALYSIS</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:12px">
+      <div style="background:var(--bg3);border-radius:7px;padding:12px;border:1px solid ${zc}25">
+        <div style="font-size:8px;color:var(--sub);margin-bottom:3px">PROBABILITY</div>
+        <div style="font-family:'Orbitron',monospace;font-size:36px;font-weight:700;color:${zc}">${sp.pct}%</div>
+        <div style="font-size:9px;color:${zc}">${sp.zone}</div>
+        <div style="height:4px;background:var(--dim);border-radius:2px;margin-top:7px;overflow:hidden"><div style="height:100%;width:${sp.pct}%;background:${zc};border-radius:2px"></div></div>
+      </div>
+      <div style="background:var(--bg3);border-radius:7px;padding:12px">
+        <div style="font-size:8px;color:var(--sub);margin-bottom:3px">TICKS SINCE SPIKE</div>
+        <div style="font-family:'Orbitron',monospace;font-size:36px;font-weight:700;color:${zc}">${sp.since}</div>
+        <div style="font-size:9px;color:var(--sub)">Avg: ${sp.avg} ticks</div>
+      </div>
+    </div>
+    ${[['EARLY','0–25%','#1e3a52','Trade the trend. Spike just happened or unlikely.'],['BUILDING','25–50%','#00d4ff','Probability growing. Stay alert.'],['WARM','50–80%','#ffa726','Spike incoming. Tighten SL if already in a trade.'],['HOT','80%+','#fff176','Spike overdue. HIGHEST weight signal. Look to enter now.']].map(z=>`<div style="display:flex;align-items:center;gap:9px;padding:6px 9px;background:var(--bg3);border-radius:5px;margin-bottom:3px;border-left:3px solid ${z[2]};opacity:${sp.zone===z[0]?1:.35}"><div style="flex:1"><div style="font-size:9px;color:${z[2]};font-weight:700">${z[0]} (${z[1]})</div><div style="font-size:8px;color:var(--sub)">${z[3]}</div></div>${sp.zone===z[0]?`<span style="font-size:8px;color:${z[2]};background:${z[2]}20;padding:1px 5px;border-radius:3px">NOW</span>`:''}</div>`).join('')}`
+}
+
+function renderEntry(sig) {
+  const inst=INST[cur],ps2=sig.ps2,isBoom=inst.type==='boom'
+  const qc=ps2?({PRIME:'#00e676',GOOD:'#00d4ff',FAIR:'#ffa726',STALE:'#333'}[ps2.q]||'#333'):'#333'
+  document.getElementById('p-entry').innerHTML=`<div class="clbl">ENTRY SETUP</div>
+    <div style="background:var(--bg3);border-radius:7px;padding:12px;margin-bottom:11px;border:1px solid ${qc}25">
+      <div style="font-size:8px;color:var(--sub);margin-bottom:3px">POST-SPIKE SETUP QUALITY</div>
+      <div style="font-family:'Orbitron',monospace;font-size:28px;font-weight:700;color:${qc}">${ps2?ps2.q:'NO SPIKE YET'}</div>
+      ${ps2?`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;margin-top:9px">
+        <div style="text-align:center"><div style="font-size:8px;color:var(--sub)">TICKS AGO</div><div style="font-family:'Orbitron',monospace;font-size:17px;color:var(--text)">${ps2.li}</div></div>
+        <div style="text-align:center"><div style="font-size:8px;color:var(--sub)">SPIKE PRICE</div><div style="font-size:10px;color:var(--text)">${ps2.sp}</div></div>
+        <div style="text-align:center"><div style="font-size:8px;color:var(--sub)">RETRACE</div><div style="font-family:'Orbitron',monospace;font-size:14px;color:${ps2.ret>0?'var(--bull)':'var(--bear)'}">${ps2.ret>0?'+':''}${ps2.ret}%</div></div>
+      </div>`:'<div style="font-size:9px;color:var(--sub);margin-top:5px">Wait for a spike — then this section shows entry quality.</div>'}
+    </div>
+    <div style="font-size:8px;color:var(--sub);margin-bottom:7px">HOW TO ENTER — ${inst.name.toUpperCase()}</div>
+    ${isBoom?`
+      <div class="estep" style="border-color:var(--boom)"><b style="color:var(--boom)">CATCHING THE BOOM SPIKE ▲</b><br>
+        1. Spike zone = HOT + Signal = BUY<br>
+        2. Enter BUY on next bullish tick in MT5<br>
+        3. SL: <b>${sig.sl}</b> &nbsp;|&nbsp; TP1: <b>${sig.tp1}</b> &nbsp;|&nbsp; TP2: <b>${sig.tp2}</b></div>
+      <div class="estep" style="border-color:var(--warn)"><b style="color:var(--warn)">POST-SPIKE PULLBACK ENTRY ▲</b><br>
+        1. After boom spike fires → wait 3–10 tick pullback<br>
+        2. Enter BUY on first bullish tick after pullback<br>
+        3. SL: below the pullback low</div>`:`
+      <div class="estep" style="border-color:var(--crash)"><b style="color:var(--crash)">CATCHING THE CRASH SPIKE ▼</b><br>
+        1. Spike zone = HOT + Signal = SELL<br>
+        2. Enter SELL on next bearish tick in MT5<br>
+        3. SL: <b>${sig.sl}</b> &nbsp;|&nbsp; TP1: <b>${sig.tp1}</b> &nbsp;|&nbsp; TP2: <b>${sig.tp2}</b></div>
+      <div class="estep" style="border-color:var(--warn)"><b style="color:var(--warn)">POST-SPIKE BOUNCE ENTRY ▼</b><br>
+        1. After crash spike fires → wait 3–15 tick bounce up<br>
+        2. Enter SELL on first bearish tick after bounce<br>
+        3. SL: above the bounce high</div>`}
+    <div style="margin-top:9px;padding:8px 10px;background:rgba(0,230,118,.05);border:1px solid rgba(0,230,118,.14);border-radius:5px;font-size:9px;color:var(--text)">
+      💡 <b style="color:var(--bull)">TRADE MANAGEMENT:</b> Hit TP1 → move SL to entry (breakeven). Let rest run to TP2/TP3. Close all at TP3 or when signal flips direction.
+    </div>`
+}
+
+function renderConfluences(sig) {
+  const bull=sig.confs.filter(c=>c.b===true),bear=sig.confs.filter(c=>c.b===false),neut=sig.confs.filter(c=>c.b===null)
+  document.getElementById('p-confluences').innerHTML=`<div class="clbl">ALL CONFLUENCES (${sig.confs.length} FACTORS)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:11px">
+      <div style="background:rgba(0,230,118,.05);border:1px solid rgba(0,230,118,.14);border-radius:6px;padding:8px;text-align:center">
+        <div style="font-size:8px;color:var(--sub)">BULLISH</div>
+        <div style="font-family:'Orbitron',monospace;font-size:28px;color:var(--bull)">${bull.length}</div>
+      </div>
+      <div style="background:rgba(255,69,96,.05);border:1px solid rgba(255,69,96,.14);border-radius:6px;padding:8px;text-align:center">
+        <div style="font-size:8px;color:var(--sub)">BEARISH</div>
+        <div style="font-family:'Orbitron',monospace;font-size:28px;color:var(--bear)">${bear.length}</div>
+      </div>
+    </div>
+    <div style="font-size:8px;color:var(--sub);margin-bottom:6px">Need 3+ factors on one side for a valid entry</div>
+    ${bull.map(c=>`<div class="ci" style="border-color:var(--bull)"><span style="color:var(--bull);font-size:10px;min-width:14px">▲</span><span style="font-size:9px;color:var(--text)">${c.t}</span></div>`).join('')}
+    ${bear.map(c=>`<div class="ci" style="border-color:var(--bear)"><span style="color:var(--bear);font-size:10px;min-width:14px">▼</span><span style="font-size:9px;color:var(--text)">${c.t}</span></div>`).join('')}
+    ${neut.map(c=>`<div class="ci" style="border-color:var(--warn)"><span style="color:var(--warn);font-size:10px;min-width:14px">◈</span><span style="font-size:9px;color:var(--text)">${c.t}</span></div>`).join('')}`
+}
+
+/* ═══════════════════════════════════════════
+   AI BRIEF
+═══════════════════════════════════════════ */
+async function getAI() {
+  const sig=sigs[cur],inst=INST[cur];if(!sig)return
+  const btn=document.getElementById('ai-btn')
+  btn.textContent='⟳ Analyzing…';btn.disabled=true
+  document.getElementById('ai-out').innerHTML=`<div style="display:flex;align-items:center;gap:9px;color:var(--boom);font-size:10px;padding:10px"><div class="spinner spin" style="width:12px;height:12px;border-width:2px"></div>Generating trade brief…</div>`
+  const prompt=`You are an expert Deriv synthetic indices trader. Write a concise 4-sentence professional trade brief.\n\nINSTRUMENT: ${inst.name} — ${inst.desc}\nSIGNAL: ${sig.dir} | Score: ${sig.score} | Confidence: ${sig.conf}%\nEntry: ${sig.c} | SL: ${sig.sl} | TP1: ${sig.tp1} | TP2: ${sig.tp2} | R:R 1:${sig.rr}\nSTRUCTURE: ${sig.str.trend} | BOS: ${sig.str.bos} | ${sig.str.HH?'HH ':''} ${sig.str.HL?'HL ':''} ${sig.str.LH?'LH ':''} ${sig.str.LL?'LL ':''}\nEMA: Price ${sig.c>sig.e20?'above':'below'} EMA20 (${sig.e20}), ${sig.c>sig.e50?'above':'below'} EMA50 (${sig.e50})\nSPIKE ZONE: ${sig.sp.zone} (${sig.sp.pct}%) — ${sig.sp.since} ticks since last spike (avg ${inst.avgInterval})\nPOST-SPIKE: ${sig.ps2?sig.ps2.q+' setup — '+sig.ps2.li+' ticks ago, '+sig.ps2.ret+'% retracement':'No recent spike'}\nMOMENTUM: ROC ${sig.mv.roc}% | Acceleration ${sig.mv.accel}% | Overextended: ${sig.mv.ext}\nBULLISH FACTORS: ${sig.confs.filter(c=>c.b===true).map(c=>c.t).join('; ')||'None'}\nBEARISH FACTORS: ${sig.confs.filter(c=>c.b===false).map(c=>c.t).join('; ')||'None'}\n\nWrite exactly 4 sentences: (1) current structure and trend bias, (2) spike probability and timing, (3) specific entry trigger and levels, (4) invalidation level and key risk.`
+  try {
+    const res=await fetch('/.netlify/functions/brief',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:[{role:'user',content:prompt}]})})
+    const data=await res.json()
+    if(data.error) document.getElementById('ai-out').innerHTML=`<div style="color:var(--crash);font-size:10px;padding:10px">Error: ${data.error}</div>`
+    else document.getElementById('ai-out').innerHTML=`<div style="font-size:11px;line-height:1.8;color:var(--text);background:var(--bg3);padding:11px;border-radius:6px;border-left:3px solid var(--boom);white-space:pre-wrap">${data.text}</div>`
+  } catch(e){
+    document.getElementById('ai-out').innerHTML=`<div style="color:var(--crash);font-size:10px;padding:10px">Request failed: ${e.message}</div>`
+  }
+  btn.textContent='⚡ GENERATE';btn.disabled=false
+}
+
+/* ═══════════════════════════════════════════
+   UI CONTROLS
+═══════════════════════════════════════════ */
+function sTab(name,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));btn.classList.add('active')
+  document.querySelectorAll('[id^="p-"]:not(#p-val):not(#p-chg)').forEach(p=>{if(p.classList.contains('card'))p.style.display='none'})
+  const p=document.getElementById('p-'+name)
+  if(p){p.style.display='';p.classList.remove('fadein');void p.offsetWidth;p.classList.add('fadein')}
+}
+function switchInst(key,btn){
+  cur=key;const inst=INST[key]
+  document.querySelectorAll('.itab').forEach(t=>t.classList.remove('active','boom','crash'))
+  btn.classList.add('active',inst.type)
+  if(sigs[key])renderAll()
+}
+function openModal(){document.getElementById('mod-ov').style.display='flex'}
+function closeModal(){document.getElementById('mod-ov').style.display='none'}
+
+/* ═══════════════════════════════════════════
+   BOOT — poll every 2 seconds
+═══════════════════════════════════════════ */
+pollAll()
+setInterval(pollAll, 2000)
+</script>
+</body>
+</html>
